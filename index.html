@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คำนวณต้นทุนงานพิมพ์ 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07080d; --panel:rgba(20,22,34,.62); --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+  --text:#eef0f7; --muted:#8d93a8; --dim:#5d6377;
+  --a1:#ff7a3d; --a2:#ffc24b; --a3:#38e1c6; --a4:#7c8cff; --a5:#ff5c8a; --a6:#b388ff;
+  --r:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Thai',system-ui,sans-serif;min-height:100%}
+body{overflow-x:hidden}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- background ---------- */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.38;animation:float 22s ease-in-out infinite}
+.b1{width:520px;height:520px;background:var(--a1);top:-160px;left:-120px}
+.b2{width:460px;height:460px;background:var(--a4);bottom:-180px;right:-100px;animation-delay:-7s}
+.b3{width:340px;height:340px;background:var(--a3);top:40%;left:55%;opacity:.18;animation-delay:-13s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(60px,40px) scale(1.08)}66%{transform:translate(-40px,60px) scale(.94)}}
+.grid{position:absolute;inset:-50%;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;transform:perspective(700px) rotateX(62deg) translateY(-8%);mask-image:radial-gradient(ellipse at 50% 30%,#000 10%,transparent 60%);animation:gridmove 14s linear infinite;opacity:.55}
+@keyframes gridmove{to{background-position:0 44px,0 0}}
+canvas#sparks{position:absolute;inset:0}
+
+/* ---------- layout ---------- */
+.wrap{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:center;gap:22px;margin-bottom:28px;flex-wrap:wrap}
+.logo{width:74px;height:74px;flex:none}
+h1{font-size:clamp(26px,3.6vw,38px);font-weight:700;letter-spacing:-.5px;line-height:1.15}
+h1 .g{background:linear-gradient(90deg,var(--a1),var(--a2),var(--a1));background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 5s linear infinite}
+@keyframes shine{to{background-position:200% center}}
+.sig{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.3px;white-space:nowrap;vertical-align:middle;margin-left:6px}
+.sub{color:var(--muted);font-size:14.5px;margin-top:4px}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line2);border-radius:99px;font-size:12.5px;color:var(--muted);background:rgba(255,255,255,.03);margin-top:10px}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--a3);box-shadow:0 0 10px var(--a3);animation:pulse 1.8s infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+.main{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:start}
+@media(max-width:960px){.main{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:20px}
+
+.card{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:var(--r);padding:22px;position:relative;overflow:hidden;opacity:0;transform:translateY(18px);animation:rise .7s cubic-bezier(.2,.8,.2,1) forwards}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(140deg,rgba(255,255,255,.16),transparent 40%,transparent 70%,rgba(255,122,61,.25));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.card .glow{position:absolute;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(255,122,61,.14),transparent 65%);pointer-events:none;transform:translate(-50%,-50%);opacity:0;transition:opacity .3s}
+.card:hover .glow{opacity:1}
+@keyframes rise{to{opacity:1;transform:none}}
+.col .card:nth-child(2){animation-delay:.08s}.col .card:nth-child(3){animation-delay:.16s}.col .card:nth-child(4){animation-delay:.24s}.col .card:nth-child(5){animation-delay:.32s}
+
+.ct{display:flex;align-items:center;gap:11px;margin-bottom:18px}
+.ic{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;flex:none}
+.ic svg{width:19px;height:19px}
+.ct h2{font-size:16.5px;font-weight:600}
+.ct small{display:block;color:var(--muted);font-size:12.5px;font-weight:400}
+
+.row{display:grid;gap:14px;grid-template-columns:repeat(2,1fr)}
+.row.r3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:560px){.row,.row.r3{grid-template-columns:1fr}}
+.f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.f.full{grid-column:1/-1}
+label{font-size:12.5px;color:var(--muted);font-weight:500}
+.in{position:relative;display:flex;align-items:center}
+input,select{width:100%;background:rgba(0,0,0,.32);border:1px solid var(--line2);color:var(--text);border-radius:12px;padding:11px 13px;font:500 15px 'IBM Plex Sans Thai',sans-serif;outline:none;transition:border-color .2s,box-shadow .2s,background .2s;-webkit-appearance:none;appearance:none}
+input[type=number]{font-family:'JetBrains Mono',monospace;-moz-appearance:textfield}
+input::-webkit-inner-spin-button{-webkit-appearance:none}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%238d93a8' stroke-width='2'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;cursor:pointer}
+select option{background:#151724}
+input:focus,select:focus{border-color:var(--a1);box-shadow:0 0 0 4px rgba(255,122,61,.15);background:rgba(0,0,0,.45)}
+.unit{position:absolute;right:12px;font-size:12.5px;color:var(--dim);pointer-events:none}
+.in input{padding-right:52px}
+.hint{font-size:11.5px;color:var(--dim)}
+
+.seg{display:flex;background:rgba(0,0,0,.32);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:4px;position:relative}
+.seg button{flex:1;background:none;border:0;color:var(--muted);font:500 13.5px 'IBM Plex Sans Thai',sans-serif;padding:8px 6px;border-radius:9px;cursor:pointer;position:relative;z-index:1;transition:color .25s}
+.seg button.on{color:#111}
+.seg .pill{position:absolute;top:4px;bottom:4px;border-radius:9px;background:linear-gradient(135deg,var(--a1),var(--a2));transition:left .35s cubic-bezier(.3,1.4,.5,1),width .35s cubic-bezier(.3,1.4,.5,1);box-shadow:0 4px 18px rgba(255,122,61,.35)}
+
+input[type=range]{padding:0;height:6px;border:0;border-radius:99px;background:linear-gradient(90deg,var(--a1) var(--p,50%),rgba(255,255,255,.1) var(--p,50%));cursor:pointer;box-shadow:none}
+input[type=range]:focus{box-shadow:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:4px solid var(--a1);box-shadow:0 0 0 6px rgba(255,122,61,.18);transition:transform .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:4px solid var(--a1)}
+.rl{display:flex;justify-content:space-between;align-items:baseline}
+.rl b{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--a2)}
+
+.time{display:flex;gap:8px}
+.time .in{flex:1}
+
+/* tiers */
+.tiers{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+.tier{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:8px 13px;border-bottom:1px solid var(--line);transition:background .3s;color:var(--muted)}
+.tier:last-child{border-bottom:0}
+.tier .mono{color:var(--text)}
+.tier.hit{background:linear-gradient(90deg,rgba(56,225,198,.16),transparent);color:var(--text)}
+.tier.hit .tag{opacity:1}
+.tag{font-size:11px;padding:1px 8px;border-radius:99px;background:var(--a3);color:#06231e;font-weight:600;opacity:0;transition:opacity .3s;align-self:center}
+.note{margin-top:12px;font-size:12.5px;color:var(--muted);line-height:1.6;padding:11px 13px;border-radius:12px;background:rgba(124,140,255,.07);border:1px dashed rgba(124,140,255,.25)}
+.note b{color:var(--text);font-weight:600}
+.hide{display:none!important}
+
+/* ---------- result ---------- */
+.sticky{position:sticky;top:18px}
+.hero{padding:26px 22px 22px;text-align:center}
+.hero .lbl{font-size:13px;color:var(--muted);letter-spacing:.3px}
+.price{font-size:clamp(44px,6vw,60px);font-weight:700;line-height:1.05;margin:6px 0 2px;background:linear-gradient(180deg,#fff,#ffd6b8);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 26px rgba(255,122,61,.35))}
+.price small{font-size:.42em;-webkit-text-fill-color:var(--muted)}
+.per{color:var(--muted);font-size:13.5px}
+.per b{color:var(--a2);font-family:'JetBrains Mono',monospace}
+
+.donut-wrap{display:flex;align-items:center;gap:20px;margin:22px 0 6px}
+@media(max-width:420px){.donut-wrap{flex-direction:column}}
+.donut{width:168px;height:168px;flex:none;position:relative}
+.donut svg{width:100%;height:100%;transform:rotate(-90deg)}
+.donut circle{fill:none;stroke-width:15;transition:stroke-dasharray .9s cubic-bezier(.2,.8,.2,1),stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)}
+.donut .ctr{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.donut .ctr span{font-size:11.5px;color:var(--muted)}
+.donut .ctr b{font-size:21px;font-family:'JetBrains Mono',monospace}
+.legend{flex:1;display:flex;flex-direction:column;gap:7px;width:100%}
+.lg{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;font-size:13px;padding:4px 6px;border-radius:8px;transition:background .2s}
+.lg:hover{background:rgba(255,255,255,.04)}
+.lg i{width:10px;height:10px;border-radius:3px}
+.lg span{color:var(--muted)}
+.lg b{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}
+.st{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:13px;padding:12px 13px;transition:transform .25s,border-color .25s}
+.st:hover{transform:translateY(-3px);border-color:var(--line2)}
+.st span{font-size:11.5px;color:var(--muted);display:block}
+.st b{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700;display:block;margin-top:3px}
+.st em{font-style:normal;font-size:11.5px;color:var(--dim);font-weight:400}
+
+.btns{display:flex;gap:10px;margin-top:16px}
+.btn{flex:1;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--text);padding:12px;border-radius:12px;font:600 14px 'IBM Plex Sans Thai',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;position:relative;overflow:hidden}
+.btn:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+.btn.pri{background:linear-gradient(135deg,var(--a1),#ff9a4d);border:0;color:#1a0c04;box-shadow:0 8px 26px rgba(255,122,61,.32)}
+.btn.pri:hover{box-shadow:0 10px 34px rgba(255,122,61,.5)}
+.btn svg{width:16px;height:16px}
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.5);transform:scale(0);animation:rip .6s ease-out;pointer-events:none}
+@keyframes rip{to{transform:scale(4);opacity:0}}
+
+.toast{position:fixed;bottom:26px;left:50%;transform:translate(-50%,30px);background:#1c1f2e;border:1px solid var(--line2);padding:11px 18px;border-radius:12px;font-size:14px;opacity:0;transition:all .35s cubic-bezier(.3,1.4,.5,1);z-index:50;display:flex;gap:8px;align-items:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* printer animation */
+.printer-anim .layer{animation:grow 3.2s ease-in-out infinite;transform-origin:bottom;transform-box:fill-box}
+.printer-anim .l2{animation-delay:.4s}.printer-anim .l3{animation-delay:.8s}.printer-anim .l4{animation-delay:1.2s}
+@keyframes grow{0%,8%{opacity:0;transform:scaleX(0)}20%,85%{opacity:1;transform:scaleX(1)}100%{opacity:0}}
+.printer-anim .head{animation:sweep 1.6s ease-in-out infinite alternate}
+@keyframes sweep{from{transform:translateX(-14px)}to{transform:translateX(14px)}}
+.printer-anim .drip{animation:drip .8s linear infinite}
+@keyframes drip{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(6px)}}
+
+.bump{animation:bump .45s}
+@keyframes bump{40%{transform:scale(1.045)}}
+
+
+/* quote modal */
+.modal{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,5,10,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .3s}
+.modal.open{opacity:1;pointer-events:auto}
+.mbox{width:min(980px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#10121c;border:1px solid var(--line2);border-radius:22px;padding:22px;display:grid;grid-template-columns:300px 1fr;gap:22px;transform:translateY(24px) scale(.97);transition:transform .45s cubic-bezier(.2,1.2,.3,1);box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.modal.open .mbox{transform:none}
+@media(max-width:760px){.mbox{grid-template-columns:1fr}}
+.mside{display:flex;flex-direction:column;gap:14px}
+.mside h3{font-size:18px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.xbtn{background:rgba(255,255,255,.06);border:1px solid var(--line2);color:var(--text);width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px;line-height:1}
+.xbtn:hover{background:rgba(255,255,255,.12)}
+.mside textarea{width:100%;background:rgba(0,0,0,.32);border:1px solid var(--line2);color:var(--text);border-radius:12px;padding:11px 13px;font:500 14px 'IBM Plex Sans Thai',sans-serif;outline:none;resize:vertical;min-height:70px}
+.mside textarea:focus{border-color:var(--a1);box-shadow:0 0 0 4px rgba(255,122,61,.15)}
+.qwrap{background:repeating-conic-gradient(#171a26 0 25%,#131520 0 50%) 0 0/22px 22px;border-radius:14px;padding:16px;display:flex;align-items:flex-start;justify-content:center}
+.qwrap img{width:100%;max-width:560px;border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.55);animation:pop .5s cubic-bezier(.2,1.3,.3,1)}
+@keyframes pop{from{transform:scale(.94);opacity:.4}}
+.mside .btns{flex-direction:column;margin-top:4px}
+.mhint{font-size:12px;color:var(--dim);line-height:1.6}
+footer{margin-top:30px;color:var(--dim);font-size:12px;text-align:center;line-height:1.7}
+footer a{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.card{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="bg"><div class="grid"></div><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><canvas id="sparks"></canvas></div>
+
+<div class="wrap">
+<header>
+  <svg class="logo printer-anim" viewBox="0 0 80 80" fill="none">
+    <rect x="6" y="6" width="68" height="68" rx="18" fill="url(#lg1)" opacity=".14"/>
+    <rect x="6.5" y="6.5" width="67" height="67" rx="17.5" stroke="url(#lg1)" opacity=".6"/>
+    <path d="M18 20h44" stroke="#8d93a8" stroke-width="3" stroke-linecap="round"/>
+    <g class="head"><rect x="33" y="18" width="14" height="10" rx="3" fill="#ff7a3d"/><path d="M38 28h4l-2 5z" fill="#ffc24b"/><circle class="drip" cx="40" cy="35" r="1.4" fill="#ffc24b"/></g>
+    <rect class="layer l4" x="28" y="44" width="24" height="5" rx="1.5" fill="#ffc24b"/>
+    <rect class="layer l3" x="26" y="49" width="28" height="5" rx="1.5" fill="#ffa04a"/>
+    <rect class="layer l2" x="24" y="54" width="32" height="5" rx="1.5" fill="#ff8a40"/>
+    <rect class="layer" x="22" y="59" width="36" height="5" rx="1.5" fill="#ff7a3d"/>
+    <path d="M16 66h48" stroke="#5d6377" stroke-width="3" stroke-linecap="round"/>
+    <defs><linearGradient id="lg1" x1="0" y1="0" x2="80" y2="80"><stop stop-color="#ff7a3d"/><stop offset="1" stop-color="#7c8cff"/></linearGradient></defs>
+  </svg>
+  <div>
+    <h1>คำนวณต้นทุน<span class="g">งานพิมพ์ 3D</span> <span class="sig">Nutchapon Claude AI</span></h1>
+    <div class="sub">ใส่ค่าวัสดุ เวลา และเครื่องพิมพ์ ระบบจะคำนวณต้นทุนจริงและราคาขายแนะนำให้ทันที</div>
+    <div class="chip"><i></i>ค่าไฟฟ้า กฟน./กฟภ. งวด ก.ย.–ธ.ค. 2569 · Ft 16.23 สตางค์/หน่วย</div>
+  </div>
+</header>
+
+<div class="main">
+<div class="col">
+
+  <!-- Material -->
+  <section class="card">
+    <div class="glow"></div>
+    <div class="ct"><div class="ic" style="background:rgba(255,122,61,.15);color:var(--a1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6"/></svg></div><div><h2>วัสดุ (ฟิลาเมนต์)</h2><small>ราคาม้วนและปริมาณที่ใช้ ดูได้จาก slicer</small></div></div>
+    <div class="row">
+      <div class="f"><label>ชนิดวัสดุ</label>
+        <select id="mat">
+          <option value="PLA" data-p="450" data-d="1.24">PLA</option>
+          <option value="PLA+" data-p="550" data-d="1.24">PLA+ / PLA Matte</option>
+          <option value="PETG" data-p="550" data-d="1.27">PETG</option>
+          <option value="ABS" data-p="550" data-d="1.04">ABS</option>
+          <option value="ASA" data-p="750" data-d="1.07">ASA</option>
+          <option value="TPU" data-p="900" data-d="1.21">TPU (ยืดหยุ่น)</option>
+          <option value="PA" data-p="1300" data-d="1.14">Nylon (PA)</option>
+          <option value="PC" data-p="1200" data-d="1.20">PC</option>
+          <option value="CF" data-p="1100" data-d="1.30">PLA-CF / PETG-CF</option>
+          <option value="custom" data-p="500" data-d="1.24">อื่น ๆ (กำหนดเอง)</option>
+        </select></div>
+      <div class="f"><label>ราคาฟิลาเมนต์ต่อม้วน</label><div class="in"><input id="fprice" type="number" min="0" step="10" value="450"><span class="unit">บาท</span></div></div>
+      <div class="f"><label>น้ำหนักม้วน</label><div class="in"><input id="fspool" type="number" min="1" step="50" value="1000"><span class="unit">กรัม</span></div></div>
+      <div class="f"><label>หน่วยที่ใช้กรอก</label><div class="seg" id="useg"><div class="pill"></div><button data-v="g" class="on">กรัม (g)</button><button data-v="m">เมตร (m)</button></div></div>
+      <div class="f full"><label id="uselbl">ปริมาณที่ใช้ทั้งหมด (รวม support)</label><div class="in"><input id="fuse" type="number" min="0" step="1" value="85"><span class="unit" id="useunit">กรัม</span></div><span class="hint" id="usehint">&nbsp;</span></div>
+    </div>
+  </section>
+
+  <!-- Printer -->
+  <section class="card">
+    <div class="glow"></div>
+    <div class="ct"><div class="ic" style="background:rgba(124,140,255,.15);color:var(--a4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 7h10M10 7v4h4V7M7 17h10"/></svg></div><div><h2>เครื่องพิมพ์และเวลา</h2><small>กำลังไฟเฉลี่ยขณะพิมพ์ (ไม่ใช่ค่าสูงสุดของ PSU)</small></div></div>
+    <div class="row">
+      <div class="f"><label>รุ่นเครื่อง (ค่าโดยประมาณ)</label>
+        <select id="printer">
+          <option data-w="80"  data-c="9000">Bambu Lab A1 mini</option>
+          <option data-w="95"  data-c="13000" selected>Bambu Lab A1</option>
+          <option data-w="130" data-c="23000">Bambu Lab P1S</option>
+          <option data-w="150" data-c="45000">Bambu Lab X1C</option>
+          <option data-w="110" data-c="8000">Creality Ender-3 V3</option>
+          <option data-w="150" data-c="16000">Creality K1 / K1C</option>
+          <option data-w="85"  data-c="35000">Prusa MK4</option>
+          <option data-w="120" data-c="10000">เครื่องทั่วไป (Bed-slinger)</option>
+          <option data-w="200" data-c="30000">เครื่องใหญ่ / มีห้องปิดอุ่น</option>
+          <option data-w="100" data-c="10000" value="custom">กำหนดเอง</option>
+        </select></div>
+      <div class="f"><label>กำลังไฟเฉลี่ย</label><div class="in"><input id="watt" type="number" min="0" step="5" value="95"><span class="unit">วัตต์</span></div></div>
+      <div class="f full"><label>เวลาพิมพ์ทั้งหมด</label>
+        <div class="time"><div class="in"><input id="hh" type="number" min="0" step="1" value="4"><span class="unit">ชม.</span></div><div class="in"><input id="mm" type="number" min="0" max="59" step="5" value="30"><span class="unit">นาที</span></div></div></div>
+    </div>
+  </section>
+
+  <!-- Electricity -->
+  <section class="card">
+    <div class="glow"></div>
+    <div class="ct"><div class="ic" style="background:rgba(255,194,75,.15);color:var(--a2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div><div><h2>ค่าไฟฟ้า (อัตราไทย)</h2><small>บ้านอยู่อาศัย กฟน. / กฟภ. รวม Ft และ VAT 7%</small></div></div>
+    <div class="f"><div class="seg" id="eseg"><div class="pill"></div><button data-v="avg" class="on">อัตราเฉลี่ย</button><button data-v="tier">อัตราก้าวหน้า</button><button data-v="custom">กำหนดเอง</button></div></div>
+
+    <div id="e-avg" style="margin-top:14px">
+      <div class="note">ค่าไฟเฉลี่ยงวด ก.ย.–ธ.ค. 2569 = <b>3.95 บาท/หน่วย</b> (ฐาน 3.78 + Ft 0.1623) รวม VAT 7% = <b class="mono">4.23 บาท/หน่วย</b><br>เหมาะสำหรับคำนวณคร่าว ๆ หรือร้านที่ไม่อยากคิดละเอียด</div>
+    </div>
+
+    <div id="e-tier" class="hide" style="margin-top:14px">
+      <div class="row">
+        <div class="f"><label>ประเภทผู้ใช้ไฟ</label>
+          <select id="ttype"><option value="12" selected>1.2 ใช้เกิน 150 หน่วย/เดือน</option><option value="11">1.1 ใช้ไม่เกิน 150 หน่วย/เดือน</option></select></div>
+        <div class="f"><label>บ้านใช้ไฟปกติต่อเดือน (ไม่รวมเครื่องพิมพ์)</label><div class="in"><input id="usage" type="number" min="0" step="10" value="350"><span class="unit">หน่วย</span></div><span class="hint">ดูได้จากบิลค่าไฟ ช่อง "จำนวนหน่วย"</span></div>
+      </div>
+      <div class="tiers" id="tiers"></div>
+      <div class="note">ค่าไฟส่วนที่เพิ่มขึ้นจากงานพิมพ์จะถูกคิดตาม<b>ขั้นบันไดที่บ้านคุณอยู่</b> (ไฟหน่วยท้าย ๆ แพงสุด) จึงสะท้อนต้นทุนจริงมากกว่าอัตราเฉลี่ย</div>
+    </div>
+
+    <div id="e-custom" class="hide" style="margin-top:14px">
+      <div class="row">
+        <div class="f"><label>ค่าไฟต่อหน่วย (รวมทุกอย่างแล้ว)</label><div class="in"><input id="crate" type="number" min="0" step="0.01" value="4.50"><span class="unit">บ./kWh</span></div></div>
+        <div class="f"><label>&nbsp;</label><span class="hint" style="padding-top:12px">ใช้กับหอพัก คอนโด หรือโซลาร์เซลล์ที่มีเรทของตัวเอง</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Other costs -->
+  <section class="card">
+    <div class="glow"></div>
+    <div class="ct"><div class="ic" style="background:rgba(56,225,198,.15);color:var(--a3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/></svg></div><div><h2>ค่าบำรุง และกำไร</h2><small>ต้นทุนแฝงที่มักลืมคิด</small></div></div>
+    <div class="row">
+      <div class="f"><label>ค่าซ่อมบำรุง/อะไหล่ (หัวฉีด, แผ่น PEI)</label><div class="in"><input id="maint" type="number" min="0" step="0.5" value="2"><span class="unit">บ./ชม.</span></div></div>
+      <div class="f"><label>ค่าบรรจุภัณฑ์ / อื่น ๆ</label><div class="in"><input id="pack" type="number" min="0" step="1" value="0"><span class="unit">บาท</span></div></div>
+      <div class="f full"><div class="rl"><label>กำไรที่ต้องการ (บวกจากต้นทุน)</label><b id="profv">50%</b></div><input id="prof" type="range" min="0" max="300" step="5" value="50"></div>
+      <div class="f full"><label>ปัดราคาขาย</label><select id="round"><option value="1" selected>ปัดขึ้นเต็มบาท</option><option value="5">ปัดขึ้นทีละ 5</option><option value="10">ปัดขึ้นทีละ 10</option><option value="0">ไม่ปัด</option></select></div>
+    </div>
+  </section>
+</div>
+
+<!-- RESULT -->
+<div class="col sticky">
+  <section class="card hero" id="hero">
+    <div class="glow"></div>
+    <div class="lbl">ราคาขายแนะนำ</div>
+    <div class="price mono" id="rPrice">฿0</div>
+    <div class="per">ต้นทุน <b id="rPer">฿0</b> · กำไร <b id="rProfit">฿0</b></div>
+
+    <div class="donut-wrap">
+      <div class="donut">
+        <svg viewBox="0 0 120 120" id="donut"></svg>
+        <div class="ctr"><span>ต้นทุนรวม</span><b id="rCost">฿0</b></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="stats">
+      <div class="st"><span>ไส้ที่ใช้</span><b id="sW">0 g</b></div>
+      <div class="st"><span>พลังงานไฟฟ้า</span><b id="sK">0 kWh</b></div>
+      <div class="st"><span>ค่าไฟต่อหน่วยที่ใช้คิด</span><b id="sR">0</b></div>
+      <div class="st"><span>ค่าไฟต่อชั่วโมงพิมพ์</span><b id="sH">0</b></div>
+      <div class="st"><span>เวลาพิมพ์</span><b id="sT">0</b></div>
+      <div class="st"><span>ต้นทุนต่อกรัม</span><b id="sG">0</b></div>
+    </div>
+
+    <div class="btns">
+      <button class="btn pri" id="copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>สร้างใบเสนอราคา</button>
+      <button class="btn" id="reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8"/><path d="M3 3v5h5"/></svg>รีเซ็ต</button>
+    </div>
+  </section>
+</div>
+</div>
+
+<footer>
+  อัตราค่าไฟ: ประเภท 1 บ้านอยู่อาศัย ตามโครงสร้างค่าไฟฐาน กฟน./กฟภ. + ค่า Ft งวด ก.ย.–ธ.ค. 2569 (16.23 สตางค์/หน่วย ตามมติ กกพ.) + VAT 7%<br>
+  ไม่รวมค่าบริการรายเดือน เพราะไม่เปลี่ยนตามการพิมพ์ · ค่า Ft ปรับทุก 4 เดือน แก้ได้ในโหมด "กำหนดเอง" · กำลังไฟและราคาวัสดุเป็นค่าประมาณ ปรับได้ทุกช่อง
+</footer>
+</div>
+
+
+<div class="modal" id="qm">
+  <div class="mbox">
+    <div class="mside">
+      <h3>ใบเสนอราคา <button class="xbtn" id="qclose" aria-label="ปิด">×</button></h3>
+      <div class="f"><label>ชื่อร้าน</label><input id="qshop" type="text" maxlength="40" placeholder="เช่น ร้านพิมพ์สามมิติ" value=""></div>
+      <div class="f"><label>ชื่อลูกค้า</label><input id="qcust" type="text" placeholder="ไม่บังคับ"></div>
+      <div class="f"><label>ชื่องาน</label><input id="qjob" type="text" placeholder="เช่น พวงกุญแจโลโก้ 20 ชิ้น"></div>
+      <div class="f"><label>สี / รายละเอียดเพิ่มเติม</label><input id="qcolor" type="text" placeholder="เช่น สีดำด้าน"></div>
+      <div class="f"><label>หมายเหตุ</label><textarea id="qnote">ราคานี้มีผล 7 วัน · ระยะเวลาผลิต 2–3 วันหลังยืนยันงาน</textarea></div>
+      <div class="btns">
+        <button class="btn pri" id="qsave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>บันทึกรูป</button>
+        <button class="btn" id="qcopyimg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>คัดลอกรูป (วางในแชตได้)</button>
+      </div>
+      <div class="mhint">ถ้ากดบันทึกไม่ได้ ให้คลิกขวาที่รูปแล้วเลือก "บันทึกรูปภาพ" หรือบนมือถือให้กดค้างที่รูป</div>
+    </div>
+    <div class="qwrap"><img id="qimg" alt="ใบเสนอราคา"></div>
+  </div>
+</div>
+<div class="toast" id="toast">✓ <span>คัดลอกแล้ว</span></div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const FT=0.1623, VAT=1.07, AVG=3.95;
+const TIERS={
+  "11":[[15,2.3488],[25,2.9882],[35,3.2405],[100,3.6237],[150,3.7171],[400,4.2218],[Infinity,4.4217]],
+  "12":[[150,3.2484],[400,4.2218],[Infinity,4.4217]]
+};
+const COLORS={mat:'#ff7a3d',elec:'#ffc24b',maint:'#38e1c6',pack:'#8d93a8'};
+const NAMES={mat:'วัสดุ',elec:'ค่าไฟ',maint:'ซ่อมบำรุง',pack:'บรรจุภัณฑ์/อื่น ๆ'};
+let unit='g', emode='avg';
+const fmt=(n,d=2)=>n.toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+const baht=(n,d=2)=>'฿'+fmt(n,d);
+const v=id=>{const x=parseFloat($(id).value);return isFinite(x)&&x>0?x:0};
+
+/* --- segmented control --- */
+function seg(el,cb){
+  const pill=el.querySelector('.pill'),bs=[...el.querySelectorAll('button')];
+  const place=b=>{pill.style.left=b.offsetLeft+'px';pill.style.width=b.offsetWidth+'px'};
+  bs.forEach(b=>b.addEventListener('click',()=>{bs.forEach(x=>x.classList.remove('on'));b.classList.add('on');place(b);cb(b.dataset.v)}));
+  const r=()=>place(el.querySelector('.on'));r();addEventListener('resize',r);
+  return {set(val){const b=bs.find(x=>x.dataset.v===val);if(b){bs.forEach(x=>x.classList.remove('on'));b.classList.add('on');place(b)}}};
+}
+const useSeg=seg($('useg'),val=>{
+  const d=parseFloat($('mat').selectedOptions[0].dataset.d),gpm=0.24053*d;
+  const cur=parseFloat($('fuse').value)||0;
+  if(val!==unit){$('fuse').value = val==='m' ? (cur/gpm).toFixed(1) : Math.round(cur*gpm);}
+  unit=val;$('useunit').textContent=val==='g'?'กรัม':'เมตร';calc();
+});
+const eSeg=seg($('eseg'),val=>{emode=val;['avg','tier','custom'].forEach(k=>$('e-'+k).classList.toggle('hide',k!==val));calc()});
+
+/* --- presets --- */
+$('mat').addEventListener('change',()=>{const o=$('mat').selectedOptions[0];if(o.value!=='custom')$('fprice').value=o.dataset.p;calc()});
+$('printer').addEventListener('change',()=>{const o=$('printer').selectedOptions[0];if(o.value!=='custom'){$('watt').value=o.dataset.w}calc()});
+
+/* --- tier math --- */
+function energyCost(units,type){
+  let cost=0,prev=0;
+  for(const [cap,rate] of TIERS[type]){ if(units<=prev)break; cost+=(Math.min(units,cap)-prev)*rate; prev=cap; }
+  return cost;
+}
+function tierIndex(units,type){return TIERS[type].findIndex(([cap])=>units<=cap)}
+function renderTiers(base,type){
+  const t=TIERS[type];let prev=0;const hit=tierIndex(Math.max(base,0.0001),type);
+  $('tiers').innerHTML=t.map(([cap,rate],i)=>{
+    const r=`${prev+1}–${cap===Infinity?'ขึ้นไป':cap}`;prev=cap;
+    return `<div class="tier ${i===hit?'hit':''}"><span>หน่วยที่ ${r}</span><span class="tag">บ้านคุณอยู่ขั้นนี้</span><span class="mono">${((rate+FT)*VAT).toFixed(4)}</span></div>`;
+  }).join('')+`<div class="tier" style="font-size:11.5px"><span>ค่าต่อหน่วยในตาราง = ค่าฐาน + Ft ${FT} แล้ว × 1.07</span><span></span><span></span></div>`;
+}
+
+/* --- count-up animation --- */
+const anim=new Map();
+function tween(el,to,f){
+  const from=anim.get(el)??0;anim.set(el,to);
+  const t0=performance.now(),dur=650;
+  cancelAnimationFrame(el._r);
+  const step=t=>{const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=f(from+(to-from)*e);if(p<1)el._r=requestAnimationFrame(step)};
+  el._r=requestAnimationFrame(step);
+}
+
+/* --- donut --- */
+function donut(parts,total){
+  const R=48,C=2*Math.PI*R;let off=0;
+  const svg=$('donut');
+  if(!svg.children.length){
+    svg.innerHTML=`<circle cx="60" cy="60" r="${R}" stroke="rgba(255,255,255,.06)"></circle>`+Object.keys(COLORS).map(k=>`<circle data-k="${k}" cx="60" cy="60" r="${R}" stroke="${COLORS[k]}" stroke-linecap="butt" stroke-dasharray="0 ${C}"></circle>`).join('');
+  }
+  Object.keys(COLORS).forEach(k=>{
+    const c=svg.querySelector(`[data-k="${k}"]`),len=total?parts[k]/total*C:0;
+    const gap=len>2?1.2:0;
+    c.setAttribute('stroke-dasharray',`${Math.max(len-gap,0)} ${C}`);c.setAttribute('stroke-dashoffset',-off);off+=len;
+  });
+  $('legend').innerHTML=Object.keys(COLORS).filter(k=>parts[k]>0.004).map(k=>`<div class="lg"><i style="background:${COLORS[k]}"></i><span>${NAMES[k]} <span style="color:var(--dim)">${total?(parts[k]/total*100).toFixed(0):0}%</span></span><b>${baht(parts[k])}</b></div>`).join('');
+}
+
+/* --- main calc --- */
+let last={};
+function calc(){
+  const d=parseFloat($('mat').selectedOptions[0].dataset.d),gpm=0.24053*d;
+  let grams = unit==='g'? v('fuse') : v('fuse')*gpm;
+  $('usehint').textContent = unit==='g' ? `≈ ${(grams/gpm).toFixed(1)} เมตร (ไส้ 1.75 มม. ความหนาแน่น ${d})` : `≈ ${fmt(grams,1)} กรัม (ไส้ 1.75 มม. ความหนาแน่น ${d})`;
+  const hours=v('hh')+v('mm')/60;
+  const kwh=v('watt')/1000*hours;
+
+  let rate;
+  if(emode==='avg') rate=AVG*VAT;
+  else if(emode==='custom') rate=v('crate');
+  else{
+    const type=$('ttype').value,base=v('usage');
+    renderTiers(base,type);
+    const extra=kwh;
+    const baseC=(energyCost(base,type)+base*FT)*VAT, newC=(energyCost(base+extra,type)+(base+extra)*FT)*VAT;
+    rate = extra>0 ? (newC-baseC)/extra : (TIERS[type][Math.max(0,tierIndex(Math.max(base,1),type))][1]+FT)*VAT;
+  }
+
+  const mat = $('fspool').value>0 ? grams*v('fprice')/v('fspool') : 0;
+  const elec=kwh*rate;
+    const maint=hours*v('maint');
+    const pack=v('pack');
+  const parts={mat,elec,maint,pack};
+  const cost=Object.values(parts).reduce((a,b)=>a+b,0);
+  const qty=1;
+  const prof=v('prof')/100;
+  let per=cost*(1+prof);
+  const rd=parseFloat($('round').value);
+  if(rd>0) per=Math.ceil(per/rd-1e-9)*rd;
+  const total=per*qty, profit=total-cost*qty;
+
+  // sliders fill
+  [['prof',300]].forEach(([id,max])=>$(id).style.setProperty('--p',(v(id)/max*100)+'%'));
+  $('profv').textContent=v('prof')+'%';
+
+  tween($('rPrice'),total,x=>baht(x,rd>0?0:2));
+  tween($('rPer'),cost,x=>baht(x));
+  tween($('rProfit'),profit,x=>baht(x));
+  tween($('rCost'),cost,x=>baht(x));
+  tween($('sW'),grams,x=>fmt(x,1)+' g');
+  tween($('sK'),kwh,x=>fmt(x,3)+' kWh');
+  $('sR').innerHTML=fmt(rate,2)+' <em>บ./kWh</em>';
+  $('sH').innerHTML=fmt(v('watt')/1000*rate,2)+' <em>บ./ชม.</em>';
+  $('sT').innerHTML=Math.floor(hours)+' <em>ชม.</em> '+Math.round((hours%1)*60)+' <em>นาที</em>';
+  $('sG').innerHTML=grams?fmt(cost/grams,2)+' <em>บ./g</em>':'–';
+  donut(parts,cost);
+
+  const sig=total.toFixed(0);
+  if(last.sig!==undefined&&last.sig!==sig){const h=$('rPrice');h.classList.remove('bump');void h.offsetWidth;h.classList.add('bump')}
+  last={sig,parts,cost,per,total,profit,qty,grams,kwh,rate,hours};
+  save();
+}
+
+/* --- quote image --- */
+const QF="'IBM Plex Sans Thai',sans-serif", QM="'JetBrains Mono',monospace";
+const QIDS=['qshop','qcust','qjob','qcolor','qnote'];
+let qNo='';
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function fit(c,t,max){if(c.measureText(t).width<=max)return t;while(t.length&&c.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…'}
+function wrap(c,t,max){const out=[];t.split('\n').forEach(par=>{let line='';for(const ch of par){if(c.measureText(line+ch).width>max&&line){out.push(line);line=ch}else line+=ch}out.push(line)});return out}
+function drawQuote(){
+  const L=last,W=800,S=2,cv=document.createElement('canvas'),c=cv.getContext('2d');
+  const shop=$('qshop').value.trim()||'ใบเสนอราคางานพิมพ์ 3D',cust=$('qcust').value.trim(),job=$('qjob').value.trim(),color=$('qcolor').value.trim(),note=$('qnote').value.trim();
+  const m=$('mat').selectedOptions[0].textContent.trim(),h=Math.floor(L.hours),mi=Math.round((L.hours-h)*60);
+  const rows=[['งาน',job||'งานพิมพ์ 3D'],['วัสดุ',m+(color?'  ·  '+color:'')],['ปริมาณวัสดุ',fmt(L.grams,1)+' กรัม'],['เวลาพิมพ์',(h?h+' ชั่วโมง ':'')+mi+' นาที']];
+  c.font=`400 17px ${QF}`;const nl=note?wrap(c,note,W-120):[];
+  const H=560+rows.length*58+(nl.length?60+nl.length*26:0)+(cust?0:-0);
+  cv.width=W*S;cv.height=H*S;c.scale(S,S);c.textBaseline='alphabetic';
+  // paper
+  c.fillStyle='#fffdfb';c.fillRect(0,0,W,H);
+  // header band
+  const g=c.createLinearGradient(0,0,W,180);g.addColorStop(0,'#ff6a2b');g.addColorStop(1,'#ffb340');
+  c.fillStyle=g;c.fillRect(0,0,W,178);
+  c.save();c.globalAlpha=.07;c.fillStyle='#fff';for(let i=0;i<7;i++){rr(c,W-250+i*14,30+i*20,200-i*28,14,4);c.fill()}c.restore();
+  // logo stack
+  c.fillStyle='rgba(255,255,255,.95)';[[0,36],[4,28],[8,20],[12,12]].forEach(([o,w],i)=>{rr(c,48+(36-w)/2,96-i*11,w,8,2.5);c.fill()});
+  c.fillStyle='#fff';c.font=`700 30px ${QF}`;c.fillText(fit(c,shop,W-330),104,92);
+  c.font=`500 15px ${QF}`;c.globalAlpha=.9;c.fillText('ใบเสนอราคา  ·  QUOTATION',104,122);c.globalAlpha=1;
+  c.textAlign='right';c.font=`600 14px ${QM}`;c.fillText(qNo,W-48,82);
+  c.font=`500 15px ${QF}`;c.fillText(new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'}),W-48,108);
+  c.textAlign='left';
+  let y=228;
+  if(cust){c.fillStyle='#9a98a6';c.font=`500 14px ${QF}`;c.fillText('เรียน',48,y);c.fillStyle='#1b1a24';c.font=`600 22px ${QF}`;c.fillText(fit(c,cust,W-96),48,y+32);y+=72}
+  else y+=0;
+  // table
+  c.fillStyle='#9a98a6';c.font=`600 13px ${QF}`;c.fillText('รายละเอียดงาน',48,y);y+=16;
+  c.strokeStyle='#ece8e4';c.lineWidth=1;
+  rows.forEach(([k,val],i)=>{
+    if(i%2===0){c.fillStyle='#faf6f2';rr(c,36,y,W-72,54,10);c.fill()}
+    c.fillStyle='#8a8796';c.font=`500 16px ${QF}`;c.fillText(k,56,y+34);
+    c.fillStyle='#1b1a24';c.font=`600 17px ${QF}`;c.textAlign='right';c.fillText(fit(c,val,W-300),W-56,y+34);c.textAlign='left';
+    y+=58;
+  });
+  y+=22;
+  // total box
+  const tg=c.createLinearGradient(36,y,W-36,y+128);tg.addColorStop(0,'#17151f');tg.addColorStop(1,'#2a1c16');
+  c.fillStyle=tg;rr(c,36,y,W-72,128,18);c.fill();
+  c.fillStyle='#ff7a3d';rr(c,36,y,7,128,3);c.fill();
+  c.fillStyle='#bdb7c6';c.font=`500 16px ${QF}`;c.fillText('ราคารวม',68,y+56);
+  c.fillStyle='#8d8899';c.font=`400 13px ${QF}`;c.fillText('บาท (THB)',68,y+82);
+  const rd=parseFloat($('round').value);
+  const pg=c.createLinearGradient(0,y+30,0,y+100);pg.addColorStop(0,'#ffd08a');pg.addColorStop(1,'#ff7a3d');
+  c.fillStyle=pg;c.font=`700 54px ${QM}`;c.textAlign='right';c.fillText('฿'+fmt(L.per,rd>0?0:2),W-68,y+84);c.textAlign='left';
+  y+=128+36;
+  if(nl.length){
+    c.fillStyle='#9a98a6';c.font=`600 13px ${QF}`;c.fillText('หมายเหตุ',48,y);y+=28;
+    c.fillStyle='#55525f';c.font=`400 17px ${QF}`;nl.forEach(l=>{c.fillText(l,48,y);y+=26});y+=10;
+  }
+  // footer
+  c.strokeStyle='#ece8e4';c.setLineDash([5,6]);c.beginPath();c.moveTo(48,H-74);c.lineTo(W-48,H-74);c.stroke();c.setLineDash([]);
+  c.fillStyle='#b0acb9';c.font=`500 14px ${QF}`;c.fillText('ขอบคุณที่ใช้บริการ',48,H-40);
+  c.textAlign='right';c.fillText(shop===`ใบเสนอราคางานพิมพ์ 3D`?'':fit(c,shop,360),W-48,H-40);c.textAlign='left';
+  const strip=c.createLinearGradient(0,0,W,0);strip.addColorStop(0,'#ff6a2b');strip.addColorStop(1,'#ffb340');c.fillStyle=strip;c.fillRect(0,H-8,W,8);
+  return cv;
+}
+let qCanvas=null;
+async function renderQuote(){
+  try{await Promise.all([document.fonts.load(`700 30px ${QF}`),document.fonts.load(`400 17px ${QF}`),document.fonts.load(`600 17px ${QF}`),document.fonts.load(`700 54px ${QM}`)])}catch(_){}
+  qCanvas=drawQuote();$('qimg').src=qCanvas.toDataURL('image/png');
+}
+$('copy').addEventListener('click',e=>{
+  ripple(e);const d=new Date(),p=n=>String(n).padStart(2,'0');
+  qNo=`QT-${String(d.getFullYear()+543).slice(2)}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  $('qm').classList.add('open');renderQuote();
+});
+const closeQ=()=>$('qm').classList.remove('open');
+$('qclose').addEventListener('click',closeQ);
+$('qm').addEventListener('click',e=>{if(e.target.id==='qm')closeQ()});
+addEventListener('keydown',e=>{if(e.key==='Escape')closeQ()});
+let qT;QIDS.forEach(id=>$(id).addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(()=>{renderQuote();saveQ()},180)}));
+function saveQ(){try{const o={};QIDS.forEach(id=>o[id]=$(id).value);localStorage.setItem('p3dquote',JSON.stringify(o))}catch(_){}}
+try{const o=JSON.parse(localStorage.getItem('p3dquote')||'null');if(o)QIDS.forEach(id=>{if(o[id]!=null)$(id).value=o[id]})}catch(_){}
+let dl=null;
+(async()=>{try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(_){dl=null}})();
+$('qsave').addEventListener('click',e=>{
+  ripple(e);if(!qCanvas)return;
+  if(!dl){toast('คลิกขวา / กดค้างที่รูปเพื่อบันทึก');return}
+  qCanvas.toBlob(async blob=>{
+    try{await dl.save({filename:(qNo||'quotation')+'.png',data:blob});toast('บันทึกรูปแล้ว')}
+    catch(err){const c=err&&err.code;if(c==='declined')return;toast(c==='rate_limited'?'รอสักครู่แล้วลองใหม่':'คลิกขวา / กดค้างที่รูปเพื่อบันทึก')}
+  },'image/png');
+});
+$('qcopyimg').addEventListener('click',e=>{
+  ripple(e);if(!qCanvas)return;
+  try{
+    const item=new ClipboardItem({'image/png':new Promise(res=>qCanvas.toBlob(res,'image/png'))});
+    navigator.clipboard.write([item]).then(()=>toast('คัดลอกรูปแล้ว วางในแชตได้เลย'),()=>toast('เบราว์เซอร์ไม่อนุญาต ลองคลิกขวาที่รูปแทน'));
+  }catch(_){toast('เบราว์เซอร์ไม่อนุญาต ลองคลิกขวาที่รูปแทน')}
+});
+function toast(msg){const t=$('toast');t.querySelector('span').textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2000)}
+function ripple(e){const b=e.currentTarget,r=b.getBoundingClientRect(),s=document.createElement('span'),z=Math.max(r.width,r.height);s.className='ripple';s.style.cssText=`width:${z}px;height:${z}px;left:${e.clientX-r.left-z/2}px;top:${e.clientY-r.top-z/2}px`;b.appendChild(s);setTimeout(()=>s.remove(),600)}
+
+/* --- persistence --- */
+const IDS=['mat','fprice','fspool','fuse','printer','watt','hh','mm','ttype','usage','crate','maint','pack','prof'];
+const DEF={};IDS.forEach(id=>DEF[id]=$(id).value);
+function save(){try{const o={unit,emode};IDS.forEach(id=>o[id]=$(id).value);localStorage.setItem('p3dcost2',JSON.stringify(o))}catch(_){}}
+function load(){try{const o=JSON.parse(localStorage.getItem('p3dcost2')||'null');if(!o)return;IDS.forEach(id=>{if(o[id]!=null)$(id).value=o[id]});unit=o.unit||'g';emode=o.emode||'avg';useSeg.set(unit);$('useunit').textContent=unit==='g'?'กรัม':'เมตร';eSeg.set(emode);['avg','tier','custom'].forEach(k=>$('e-'+k).classList.toggle('hide',k!==emode))}catch(_){}}
+$('reset').addEventListener('click',e=>{ripple(e);$('round').value='1';IDS.forEach(id=>$(id).value=DEF[id]);unit='g';emode='avg';useSeg.set('g');$('useunit').textContent='กรัม';eSeg.set('avg');['avg','tier','custom'].forEach(k=>$('e-'+k).classList.toggle('hide',k!=='avg'));calc();toast('รีเซ็ตค่าเริ่มต้นแล้ว')});
+
+document.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',calc));
+
+/* --- card glow follows cursor --- */
+document.querySelectorAll('.card').forEach(c=>{const g=c.querySelector('.glow');if(!g)return;c.addEventListener('pointermove',e=>{const r=c.getBoundingClientRect();g.style.left=(e.clientX-r.left)+'px';g.style.top=(e.clientY-r.top)+'px'})});
+
+/* --- tilt on hero --- */
+const hero=$('hero');
+hero.addEventListener('pointermove',e=>{if(innerWidth<960)return;const r=hero.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;hero.style.transform=`perspective(900px) rotateY(${x*5}deg) rotateX(${-y*5}deg)`});
+hero.addEventListener('pointerleave',()=>hero.style.transform='');
+
+/* --- floating sparks (filament particles) --- */
+const cv=$('sparks'),cx=cv.getContext('2d');let P=[];
+function rs(){cv.width=innerWidth*devicePixelRatio;cv.height=innerHeight*devicePixelRatio}rs();addEventListener('resize',rs);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+for(let i=0;i<38;i++)P.push({x:Math.random(),y:Math.random(),s:Math.random()*1.6+.4,v:Math.random()*.00025+.00008,h:Math.random()<.6?'255,140,70':'124,140,255',a:Math.random()});
+(function loop(){
+  if(reduce)return;cx.clearRect(0,0,cv.width,cv.height);
+  P.forEach(p=>{p.y-=p.v;p.a+=.01;if(p.y<-.02){p.y=1.02;p.x=Math.random()}
+    const o=.25+Math.sin(p.a)*.2;cx.beginPath();cx.arc(p.x*cv.width,p.y*cv.height,p.s*devicePixelRatio,0,7);cx.fillStyle=`rgba(${p.h},${o})`;cx.shadowBlur=8;cx.shadowColor=`rgba(${p.h},.8)`;cx.fill()});
+  requestAnimationFrame(loop);
+})();
+
+load();calc();
+})();
+</script>
+</body>
+</html>
